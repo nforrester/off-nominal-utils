@@ -2,18 +2,10 @@
 
 # Display a user's prediction and voting history and total score.
 
-# LIST OF THINGS THAT LOOK LIKE BUGS BUT ARE LIKELY TO BE MISUNDERSTANDINGS
-# - Predictions before ID 50 are missing.
-# - The following users have score discrepancies (all the ones I have checked):
-#   Username          Computed score       Official score      Notes
-#   'Lars Osborne'    -128                 -130                This is might due to rounding issues with date subtraction
-#   Thunderscreech    -550                 30                  Clearly Thunderscreech is cooking the books with those missing predictions with ID < 50 :D
-#   nforrester        557                  963                 I cannot explain this.
-#   kris              1501                 1986                I cannot explain this.
-
 import sys
 import requests
 import datetime
+import math
 
 # Take username as an argument on the command line. If the username has spaces, you need to use quotes.
 username = sys.argv[1]
@@ -41,7 +33,8 @@ def ndb(question, arg=None):
     query = 'https://deltayeet.net/ndb/?' + question
     if arg is not None:
         query += '=' + arg
-    return requests.get(query).json()
+    result = requests.get(query).json()
+    return result
 
 # Assemble a dict of all predictions by taking the union of standing, retired, and judged.
 all_predictions = dict()
@@ -65,6 +58,8 @@ def bucket_predictions(predictions):
     """
     Given a dict of predictions, return the judged and standing ones in separate dicts.
     """
+    for p in predictions.values():
+        assert (p['type'] == 'judged') == (p['judged'] == '1')
     judged = {k: v for k, v in predictions.items() if v['type'] == 'judged'}
     standing = {k: v for k, v in predictions.items() if v['type'] == 'standing'}
     return judged, standing
@@ -76,10 +71,10 @@ def point_value(key, prediction):
     """
     assert(prediction['type'] == 'judged')
     v = votes[key]
-    prescient = v['thumbs_up'] > v['thumbs_down']
+    prescient = int(v['thumbs_up']) >= int(v['thumbs_down'])
     start = datetime.datetime.fromisoformat(prediction['date'])
     end = datetime.datetime.fromisoformat(prediction['due'])
-    days = int((end - start).total_seconds() / 86400)
+    days = abs((end.date() - start.date()).days)
     if prescient:
         return days
     return -days
